@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Process Monitor Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <style>
+    /* Custom animations */
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+    .animate-pulse-slow {
+      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    .transition-all {
+      transition-property: all;
+      transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+      transition-duration: 300ms;
+    }
+    .slide-in {
+      animation: slideIn 0.3s ease-out forwards;
+    }
+    @keyframes slideIn {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .fade-out {
+      animation: fadeOut 0.3s ease-out forwards;
+    }
+    @keyframes fadeOut {
+      from { opacity: 1; }
+      to { opacity: 0; }
+    }
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #1f2937;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #4b5563;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #6b7280;
+    }
+  </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+  <div class="container mx-auto px-4 py-8">
+    <!-- Header Section -->
+    <header class="mb-8">
+      <div class="flex flex-col md:flex-row justify-between items-center">
+        <div>
+          <h1 class="text-3xl font-bold text-blue-500">Process Monitor Dashboard</h1>
+          <p class="text-gray-400 mt-2">Real-time monitoring of Windows processes</p>
+        </div>
+        <div class="mt-4 md:mt-0 flex items-center space-x-4">
+          <button id="refreshBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition-all flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Refresh
+          </button>
+          <div class="relative">
+            <input id="searchInput" type="text" placeholder="Search processes..." class="bg-gray-800 text-white px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-64">
+            <div class="absolute right-3 top-2.5 text-gray-400">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- System Overview Section -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div class="bg-gray-800 rounded-lg p-6 shadow-lg">
+        <h2 class="text-xl font-semibold mb-4 text-gray-300">Total Processes</h2>
+        <div class="flex items-center">
+          <div class="text-4xl font-bold text-blue-500" id="totalProcesses">0</div>
+          <div class="ml-4 text-gray-400">running processes</div>
+        </div>
+      </div>
+      <div class="bg-gray-800 rounded-lg p-6 shadow-lg">
+        <h2 class="text-xl font-semibold mb-4 text-gray-300">CPU Usage</h2>
+        <div class="relative pt-1">
+          <div class="flex items-center justify-between">
+            <div>
+              <span id="cpuUsageText" class="text-4xl font-bold text-green-500">0%</span>
+            </div>
+          </div>
+          <div class="overflow-hidden h-4 mt-4 text-xs flex rounded bg-gray-700">
+            <div id="cpuUsageBar" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-green-500 transition-all duration-500 ease-in-out" style="width: 0%"></div>
+          </div>
+        </div>
+      </div>
+      <div class="bg-gray-800 rounded-lg p-6 shadow-lg">
+        <h2 class="text-xl font-semibold mb-4 text-gray-300">Memory Usage</h2>
+        <div class="relative pt-1">
+          <div class="flex items-center justify-between">
+            <div>
+              <span id="memoryUsageText" class="text-4xl font-bold text-purple-500">0 MB</span>
+            </div>
+          </div>
+          <div class="overflow-hidden h-4 mt-4 text-xs flex rounded bg-gray-700">
+            <div id="memoryUsageBar" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-purple-500 transition-all duration-500 ease-in-out" style="width: 0%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Process Table Section -->
+    <div class="bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+      <div class="p-6 border-b border-gray-700">
+        <h2 class="text-xl font-semibold">Running Processes</h2>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-700">
+          <thead class="bg-gray-700">
+            <tr>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600 transition-all" data-sort="name">
+                <div class="flex items-center">
+                  Process Name
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1 sort-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                  </svg>
+                </div>
+              </th>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600 transition-all" data-sort="pid">
+                <div class="flex items-center">
+                  PID
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1 sort-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                  </svg>
+                </div>
+              </th>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600 transition-all" data-sort="cpu">
+                <div class="flex items-center">
+                  CPU Usage
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1 sort-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                  </svg>
+                </div>
+              </th>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600 transition-all" data-sort="memory">
+                <div class="flex items-center">
+                  Memory Usage
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1 sort-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                  </svg>
+                </div>
+              </th>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody id="processTableBody" class="bg-gray-800 divide-y divide-gray-700">
+            <!-- Process rows will be inserted here -->
+            <tr>
+              <td colspan="5" class="px-6 py-4 text-center text-gray-400">
+                <div class="animate-pulse-slow">
+                  Loading processes...
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal for confirmation -->
+  <div id="confirmationModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+    <div class="bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl transform transition-all">
+      <h3 class="text-xl font-bold mb-4">Confirm Process Termination</h3>
+      <p class="text-gray-300 mb-6">Are you sure you want to terminate the process <span id="processToKill" class="font-semibold"></span>?</p>
+      <div class="flex justify-end space-x-4">
+        <button id="cancelKillBtn" class="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 transition-all">Cancel</button>
+        <button id="confirmKillBtn" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-all">Terminate</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast notification -->
+  <div id="toast" class="fixed bottom-4 right-4 bg-gray-800 text-white px-6 py-3 rounded-lg shadow-lg transform translate-y-20 opacity-0 transition-all duration-300 flex items-center">
+    <div id="toastIcon" class="mr-3"></div>
+    <div id="toastMessage"></div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Connect to Socket.IO server
+      const socket = io();
+      
+      // DOM elements
+      const processTableBody = document.getElementById('processTableBody');
+      const totalProcessesEl = document.getElementById('totalProcesses');
+      const cpuUsageTextEl = document.getElementById('cpuUsageText');
+      const cpuUsageBarEl = document.getElementById('cpuUsageBar');
+      const memoryUsageTextEl = document.getElementById('memoryUsageText');
+      const memoryUsageBarEl = document.getElementById('memoryUsageBar');
+      const searchInput = document.getElementById('searchInput');
+      const refreshBtn = document.getElementById('refreshBtn');
+      const confirmationModal = document.getElementById('confirmationModal');
+      const processToKillEl = document.getElementById('processToKill');
+      const confirmKillBtn = document.getElementById('confirmKillBtn');
+      const cancelKillBtn = document.getElementById('cancelKillBtn');
+      const toast = document.getElementById('toast');
+      const toastMessage = document.getElementById('toastMessage');
+      const toastIcon = document.getElementById('toastIcon');
+      
+      // State variables
+      let processes = [];
+      let filteredProcesses = [];
+      let currentSort = { column: 'cpu', direction: 'desc' };
+      let processToKill = null;
+      let preventRefresh = false;
+      let lastCpuValue = 0; // Store the last CPU value for smoothing
+      
+      // Initialize the dashboard
+      function init() {
+        // Set up event listeners
+        setupEventListeners();
+        
+        // Listen for process data from server
+        socket.on('processData', handleProcessData);
+        
+        // Listen for process killed event
+        socket.on('processKilled', handleProcessKilled);
+      }
+      
+      // Set up event listeners
+      function setupEventListeners() {
+        // Sort columns
+        document.querySelectorAll('th[data-sort]').forEach(th => {
+          th.addEventListener('click', () => {
+            const column = th.dataset.sort;
+            if (currentSort.column === column) {
+              currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+              currentSort.column = column;
+              currentSort.direction = 'desc';
+            }
+            renderProcessTable();
+          });
+        });
+        
+        // Search input
+        searchInput.addEventListener('input', debounce(() => {
+          filterProcesses();
+          renderProcessTable();
+        }, 300));
+        
+        // Refresh button
+        refreshBtn.addEventListener('click', () => {
+          refreshBtn.classList.add('animate-pulse-slow');
+          socket.emit('requestUpdate');
+          setTimeout(() => {
+            refreshBtn.classList.remove('animate-pulse-slow');
+          }, 1000);
+        });
+        
+        // Confirmation modal
+        confirmKillBtn.addEventListener('click', () => {
+          if (processToKill) {
+            socket.emit('killProcess', processToKill.pid);
+            hideModal();
+          }
+        });
+        
+        cancelKillBtn.addEventListener('click', hideModal);
+      }
+      
+      // Handle process data from server
+      function handleProcessData(data) {
+        processes = data;
+        filterProcesses();
+        updateSystemOverview();
+        renderProcessTable();
+      }
+      
+      // Handle process killed event
+      function handleProcessKilled(data) {
+        if (data.success) {
+          showToast(`Process ${data.pid} terminated successfully`, 'success');
+        } else {
+          showToast(`Failed to terminate process: ${data.error}`, 'error');
+        }
+      }
+      
+      // Filter processes based on search input
+      function filterProcesses() {
+        const searchTerm = searchInput.value.toLowerCase();
+        if (!searchTerm) {
+          filteredProcesses = [...processes];
+        } else {
+          filteredProcesses = processes.filter(process => 
+            process.name.toLowerCase().includes(searchTerm) || 
+            process.pid.toString().includes(searchTerm)
+          );
+        }
+      }
+      
+      // Sort processes
+      function sortProcesses(processes) {
+        return [...processes].sort((a, b) => {
+          let valueA = a[currentSort.column];
+          let valueB = b[currentSort.column];
+          
+          // Handle string comparison
+          if (typeof valueA === 'string') {
+            valueA = valueA.toLowerCase();
+            valueB = valueB.toLowerCase();
+          }
+          
+          if (valueA < valueB) return currentSort.direction === 'asc' ? -1 : 1;
+          if (valueA > valueB) return currentSort.direction === 'asc' ? 1 : -1;
+          return 0;
+        });
+      }
+      
+      // Update system overview
+      function updateSystemOverview() {
+        // Update total processes count
+        totalProcessesEl.textContent = processes.length;
+        
+        // Calculate total CPU and memory usage
+        let totalCpu = 0;
+        let totalMemory = 0;
+        
+        processes.forEach(process => {
+          totalCpu += process.cpu;
+          totalMemory += process.memory;
+        });
+        
+        // Apply smoothing to CPU usage to prevent jumpy display
+        // Use weighted average: 70% of new value, 30% of old value
+        if (lastCpuValue > 0) {
+          totalCpu = (totalCpu * 0.7) + (lastCpuValue * 0.3);
+        }
+        lastCpuValue = totalCpu;
+        
+        // Update CPU usage
+        const cpuPercentage = Math.min(100, totalCpu).toFixed(1);
+        cpuUsageTextEl.textContent = `${cpuPercentage}%`;
+        cpuUsageBarEl.style.width = `${cpuPercentage}%`;
+        
+        // Update color based on usage
+        if (totalCpu > 70) {
+          cpuUsageTextEl.className = 'text-4xl font-bold text-red-500';
+          cpuUsageBarEl.className = 'shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-red-500 transition-all duration-500 ease-in-out';
+        } else if (totalCpu > 40) {
+          cpuUsageTextEl.className = 'text-4xl font-bold text-yellow-500';
+          cpuUsageBarEl.className = 'shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-yellow-500 transition-all duration-500 ease-in-out';
+        } else {
+          cpuUsageTextEl.className = 'text-4xl font-bold text-green-500';
+          cpuUsageBarEl.className = 'shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-green-500 transition-all duration-500 ease-in-out';
+        }
+        
+        // Update memory usage
+        memoryUsageTextEl.textContent = `${totalMemory.toLocaleString()} MB`;
+        // Assuming 16GB (16384 MB) of total memory for the percentage calculation
+        const memoryPercentage = Math.min(100, (totalMemory / 16384) * 100).toFixed(1);
+        memoryUsageBarEl.style.width = `${memoryPercentage}%`;
+        
+        // Update color based on usage
+        if (memoryPercentage > 70) {
+          memoryUsageTextEl.className = 'text-4xl font-bold text-red-500';
+          memoryUsageBarEl.className = 'shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-red-500 transition-all duration-500 ease-in-out';
+        } else if (memoryPercentage > 40) {
+          memoryUsageTextEl.className = 'text-4xl font-bold text-yellow-500';
+          memoryUsageBarEl.className = 'shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-yellow-500 transition-all duration-500 ease-in-out';
+        } else {
+          memoryUsageTextEl.className = 'text-4xl font-bold text-purple-500';
+          memoryUsageBarEl.className = 'shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-purple-500 transition-all duration-500 ease-in-out';
+        }
+      }
+      
+      // Render process table
+      function renderProcessTable() {
+        // Clear table
+        processTableBody.innerHTML = '';
+        
+        // Sort and render processes
+        const sortedProcesses = sortProcesses(filteredProcesses);
+        
+        if (sortedProcesses.length === 0) {
+          const emptyRow = document.createElement('tr');
+          emptyRow.innerHTML = `
+            <td colspan="5" class="px-6 py-4 text-center text-gray-400">
+              No processes found matching your search.
+            </td>
+          `;
+          processTableBody.appendChild(emptyRow);
+          return;
+        }
+        
+        sortedProcesses.forEach((process, index) => {
+          const row = document.createElement('tr');
+          row.className = 'hover:bg-gray-700 transition-all slide-in';
+          row.style.animationDelay = `${index * 30}ms`;
+          
+          // Determine CPU and memory usage classes
+          let cpuClass = 'text-green-400';
+          if (process.cpu > 10) cpuClass = 'text-yellow-400';
+          if (process.cpu > 30) cpuClass = 'text-red-400';
+          
+          let memoryClass = 'text-purple-400';
+          if (process.memory > 500) memoryClass = 'text-yellow-400';
+          if (process.memory > 1000) memoryClass = 'text-red-400';
+          
+          row.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap">
+              <div class="flex items-center">
+                <div class="text-sm font-medium text-white">${process.name}</div>
+              </div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <div class="text-sm text-gray-300">${process.pid}</div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <div class="text-sm ${cpuClass}">${process.cpu.toFixed(1)}%</div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <div class="text-sm ${memoryClass}">${process.memory} MB</div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+              <button class="kill-process-btn text-red-500 hover:text-red-700 transition-all" data-pid="${process.pid}" data-name="${process.name}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </td>
+          `;
+          
+          processTableBody.appendChild(row);
+        });
+        
+        // Add event listeners to kill buttons
+        document.querySelectorAll('.kill-process-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const pid = parseInt(btn.dataset.pid);
+            const name = btn.dataset.name;
+            showKillConfirmation(pid, name);
+          });
+        });
+      }
+      
+      // Show kill confirmation modal
+      function showKillConfirmation(pid, name) {
+        processToKill = { pid, name };
+        processToKillEl.textContent = `${name} (PID: ${pid})`;
+        confirmationModal.classList.remove('hidden');
+        confirmationModal.classList.add('fade-in');
+      }
+      
+      // Hide modal
+      function hideModal() {
+        confirmationModal.classList.add('hidden');
+        processToKill = null;
+      }
+      
+      // Show toast notification
+      function showToast(message, type = 'info') {
+        // Set icon based on type
+        if (type === 'success') {
+          toastIcon.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+          `;
+        } else if (type === 'error') {
+          toastIcon.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          `;
+        } else {
+          toastIcon.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          `;
+        }
+        
+        toastMessage.textContent = message;
+        toast.classList.remove('translate-y-20', 'opacity-0');
+        
+        setTimeout(() => {
+          toast.classList.add('translate-y-20', 'opacity-0');
+        }, 3000);
+      }
+      
+      // Debounce function for search input
+      function debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+          const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+          };
+          clearTimeout(timeout);
+          timeout = setTimeout(later, wait);
+        };
+      }
+      
+      // Initialize the dashboard
+      init();
+    });
+  </script>
+</body>
+</html>
