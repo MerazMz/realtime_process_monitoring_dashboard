@@ -6,6 +6,8 @@
   <title>Process Monitor Dashboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <!-- Add Chart.js library -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     /* Custom animations */
     @keyframes pulse {
@@ -111,6 +113,22 @@
           <div class="overflow-hidden h-4 mt-4 text-xs flex rounded bg-gray-700">
             <div id="memoryUsageBar" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-purple-500 transition-all duration-500 ease-in-out" style="width: 0%"></div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Usage Graphs Section -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+      <div class="bg-gray-800 rounded-lg p-6 shadow-lg">
+        <h2 class="text-xl font-semibold mb-4 text-gray-300">CPU Usage History</h2>
+        <div class="h-64">
+          <canvas id="cpuChart"></canvas>
+        </div>
+      </div>
+      <div class="bg-gray-800 rounded-lg p-6 shadow-lg">
+        <h2 class="text-xl font-semibold mb-4 text-gray-300">Memory Usage History</h2>
+        <div class="h-64">
+          <canvas id="memoryChart"></canvas>
         </div>
       </div>
     </div>
@@ -223,6 +241,164 @@
       let processToKill = null;
       let preventRefresh = false;
       let lastCpuValue = 0; // Store the last CPU value for smoothing
+      
+      // Chart data arrays
+      const maxDataPoints = 20; // Maximum number of data points to display
+      const cpuData = [];
+      const memoryData = [];
+      const timeLabels = [];
+      
+      // Initialize charts
+      const cpuChartCtx = document.getElementById('cpuChart').getContext('2d');
+      const memoryChartCtx = document.getElementById('memoryChart').getContext('2d');
+      
+      // CPU Chart
+      const cpuChart = new Chart(cpuChartCtx, {
+        type: 'line',
+        data: {
+          labels: timeLabels,
+          datasets: [{
+            label: 'CPU Usage (%)',
+            data: cpuData,
+            borderColor: 'rgb(34, 197, 94)',
+            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+            borderWidth: 2,
+            tension: 0.3,
+            fill: true,
+            pointRadius: 2,
+            pointHoverRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: {
+            duration: 500
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 100,
+              grid: {
+                color: 'rgba(75, 85, 99, 0.2)'
+              },
+              ticks: {
+                color: 'rgba(156, 163, 175, 1)'
+              }
+            },
+            x: {
+              grid: {
+                display: false
+              },
+              ticks: {
+                color: 'rgba(156, 163, 175, 1)',
+                maxRotation: 0,
+                autoSkip: true,
+                maxTicksLimit: 10
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              display: false
+            },
+            tooltip: {
+              backgroundColor: 'rgba(17, 24, 39, 0.9)',
+              titleColor: 'rgba(255, 255, 255, 1)',
+              bodyColor: 'rgba(209, 213, 219, 1)',
+              borderColor: 'rgba(75, 85, 99, 1)',
+              borderWidth: 1,
+              padding: 10,
+              displayColors: false
+            }
+          }
+        }
+      });
+      
+      // Memory Chart
+      const memoryChart = new Chart(memoryChartCtx, {
+        type: 'line',
+        data: {
+          labels: timeLabels,
+          datasets: [{
+            label: 'Memory Usage (MB)',
+            data: memoryData,
+            borderColor: 'rgb(168, 85, 247)',
+            backgroundColor: 'rgba(168, 85, 247, 0.1)',
+            borderWidth: 2,
+            tension: 0.3,
+            fill: true,
+            pointRadius: 2,
+            pointHoverRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: {
+            duration: 500
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              grid: {
+                color: 'rgba(75, 85, 99, 0.2)'
+              },
+              ticks: {
+                color: 'rgba(156, 163, 175, 1)'
+              }
+            },
+            x: {
+              grid: {
+                display: false
+              },
+              ticks: {
+                color: 'rgba(156, 163, 175, 1)',
+                maxRotation: 0,
+                autoSkip: true,
+                maxTicksLimit: 10
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              display: false
+            },
+            tooltip: {
+              backgroundColor: 'rgba(17, 24, 39, 0.9)',
+              titleColor: 'rgba(255, 255, 255, 1)',
+              bodyColor: 'rgba(209, 213, 219, 1)',
+              borderColor: 'rgba(75, 85, 99, 1)',
+              borderWidth: 1,
+              padding: 10,
+              displayColors: false
+            }
+          }
+        }
+      });
+      
+      // Function to update chart data
+      function updateCharts(cpuValue, memoryValue) {
+        // Add current time
+        const now = new Date();
+        const timeLabel = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        
+        // Add new data points
+        timeLabels.push(timeLabel);
+        cpuData.push(cpuValue);
+        memoryData.push(memoryValue);
+        
+        // Limit the number of data points
+        if (timeLabels.length > maxDataPoints) {
+          timeLabels.shift();
+          cpuData.shift();
+          memoryData.shift();
+        }
+        
+        // Update charts
+        cpuChart.update();
+        memoryChart.update();
+      }
       
       // Initialize the dashboard
       function init() {
@@ -381,6 +557,9 @@
           memoryUsageTextEl.className = 'text-4xl font-bold text-purple-500';
           memoryUsageBarEl.className = 'shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-purple-500 transition-all duration-500 ease-in-out';
         }
+        
+        // Update charts with new data
+        updateCharts(parseFloat(cpuPercentage), totalMemory);
       }
       
       // Render process table
