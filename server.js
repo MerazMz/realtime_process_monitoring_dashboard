@@ -42,7 +42,23 @@ app.get('/api/system-info', (req, res) => {
     const freeMemoryMB = Math.round(freeMemoryBytes / (1024 * 1024));
     const usedMemoryMB = Math.round(usedMemoryBytes / (1024 * 1024));
     
-    const cpuCount = os.cpus().length;
+    // Get CPU information
+    const cpus = os.cpus();
+    const cpuCount = cpus.length;
+    const cpuModel = cpus.length > 0 ? cpus[0].model : 'Unknown CPU';
+    const cpuSpeed = cpus.length > 0 ? cpus[0].speed / 1000 : 0; // Convert MHz to GHz
+    
+    // Get device name and uptime
+    const hostname = os.hostname();
+    const uptime = os.uptime(); // System uptime in seconds
+    
+    // Calculate formatted uptime
+    const days = Math.floor(uptime / 86400);
+    const hours = Math.floor((uptime % 86400) / 3600);
+    const minutes = Math.floor((uptime % 3600) / 60);
+    const seconds = Math.floor(uptime % 60);
+    
+    const formattedUptime = `${days}d ${hours}h ${minutes}m ${seconds}s`;
     
     res.json({
       totalMemoryMB,
@@ -50,9 +66,13 @@ app.get('/api/system-info', (req, res) => {
       usedMemoryMB,
       memoryUsagePercent: Math.round((usedMemoryBytes / totalMemoryBytes) * 100),
       cpuCount,
+      cpuModel,
+      cpuSpeed: cpuSpeed.toFixed(2), // Format GHz with 2 decimal places
       platform: os.platform(),
       osType: os.type(),
-      osRelease: os.release()
+      osRelease: os.release(),
+      hostname,
+      uptime: formattedUptime
     });
   } catch (error) {
     console.error('Error fetching system info:', error);

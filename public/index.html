@@ -131,6 +131,29 @@
       </div>
     </div>
 
+    <!-- Device Information Section -->
+    <div class="bg-gray-800 rounded-lg p-6 shadow-lg mb-8">
+      <h2 class="text-xl font-semibold mb-4 text-gray-300">Device Information</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div>
+          <h3 class="text-sm uppercase text-gray-400 font-medium mb-2">Device Name</h3>
+          <p id="deviceName" class="text-lg font-semibold text-white">Loading...</p>
+        </div>
+        <div>
+          <h3 class="text-sm uppercase text-gray-400 font-medium mb-2">Processor</h3>
+          <p id="processorInfo" class="text-lg font-semibold text-white">Loading...</p>
+        </div>
+        <div>
+          <h3 class="text-sm uppercase text-gray-400 font-medium mb-2">Operating System</h3>
+          <p id="osInfo" class="text-lg font-semibold text-white">Loading...</p>
+        </div>
+        <div>
+          <h3 class="text-sm uppercase text-gray-400 font-medium mb-2">Uptime</h3>
+          <p id="systemUptime" class="text-lg font-semibold text-white">Loading...</p>
+        </div>
+      </div>
+    </div>
+
     <!-- Usage Graphs Section -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
       <div class="bg-gray-800 rounded-lg p-6 shadow-lg">
@@ -305,6 +328,10 @@
       const memoryUsageTextEl = document.getElementById('memoryUsageText');
       const memoryUsageBarEl = document.getElementById('memoryUsageBar');
       const totalMemoryEl = document.getElementById('totalMemory');
+      const deviceNameEl = document.getElementById('deviceName');
+      const processorInfoEl = document.getElementById('processorInfo');
+      const osInfoEl = document.getElementById('osInfo');
+      const systemUptimeEl = document.getElementById('systemUptime');
       const searchInput = document.getElementById('searchInput');
       const refreshBtn = document.getElementById('refreshBtn');
       const confirmationModal = document.getElementById('confirmationModal');
@@ -524,9 +551,26 @@
               // Update memory display immediately
               updateMemoryDisplay(usedMemoryMB, systemMemoryPercent);
             }
+            
+            // Update device information
+            if (data.hostname) {
+              deviceNameEl.textContent = data.hostname;
+            }
+            
+            if (data.cpuModel) {
+              processorInfoEl.textContent = `${data.cpuModel} @ ${data.cpuSpeed} GHz (${data.cpuCount} Threads)`;
+            }
+            
+            if (data.osType) {
+              osInfoEl.textContent = `${data.osType} ${data.osRelease} (${data.platform})`;
+            }
+            
+            if (data.uptime) {
+              systemUptimeEl.textContent = data.uptime;
+            }
           })
           .catch(error => {
-            console.error('Failed to get system memory info:', error);
+            console.error('Failed to get system info:', error);
             // Set default value
             const totalMemoryGB = (systemMemoryMB / 1024).toFixed(1);
             totalMemoryEl.textContent = `(of ${totalMemoryGB} GB total)`;
@@ -875,6 +919,11 @@
               
               // Update memory display
               updateMemoryDisplay(usedMemoryMB, systemMemoryPercent);
+            }
+            
+            // Update uptime which changes constantly
+            if (data.uptime) {
+              systemUptimeEl.textContent = data.uptime;
             }
           })
           .catch(error => {
