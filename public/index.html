@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/x-icon" href="favicon.png">
   <title>Process Monitor Dashboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
@@ -50,6 +51,17 @@
     ::-webkit-scrollbar-thumb:hover {
       background: #6b7280;
     }
+    /* Chart styles */
+    canvas {
+      width: 100% !important;
+      height: 100% !important;
+      display: block;
+    }
+    .chart-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
   </style>
 </head>
 <body class="bg-gray-900 text-white min-h-screen">
@@ -95,6 +107,7 @@
           <div class="flex items-center justify-between">
             <div>
               <span id="cpuUsageText" class="text-4xl font-bold text-green-500">0%</span>
+              <span id="cpuCores" class="text-sm text-gray-400 ml-2"></span>
             </div>
           </div>
           <div class="overflow-hidden h-4 mt-4 text-xs flex rounded bg-gray-700">
@@ -108,6 +121,7 @@
           <div class="flex items-center justify-between">
             <div>
               <span id="memoryUsageText" class="text-4xl font-bold text-purple-500">0 MB</span>
+              <span id="totalMemory" class="text-sm text-gray-400 ml-2"></span>
             </div>
           </div>
           <div class="overflow-hidden h-4 mt-4 text-xs flex rounded bg-gray-700">
@@ -121,22 +135,26 @@
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
       <div class="bg-gray-800 rounded-lg p-6 shadow-lg">
         <h2 class="text-xl font-semibold mb-4 text-gray-300">CPU Usage History</h2>
-        <div class="h-64">
-          <canvas id="cpuChart"></canvas>
+        <div class="h-64 md:h-80">
+          <div class="chart-container">
+            <canvas id="cpuChart"></canvas>
+          </div>
         </div>
       </div>
       <div class="bg-gray-800 rounded-lg p-6 shadow-lg">
         <h2 class="text-xl font-semibold mb-4 text-gray-300">Memory Usage History</h2>
-        <div class="h-64">
-          <canvas id="memoryChart"></canvas>
+        <div class="h-64 md:h-80">
+          <div class="chart-container">
+            <canvas id="memoryChart"></canvas>
+          </div>
         </div>
       </div>
     </div>
 
     <!-- Process Table Section -->
-    <div class="bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+    <div class="bg-gray-800 rounded-lg shadow-lg overflow-hidden mb-8">
       <div class="p-6 border-b border-gray-700">
-        <h2 class="text-xl font-semibold">Running Processes</h2>
+        <h2 class="text-xl font-semibold">Application Processes</h2>
       </div>
       <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-700">
@@ -179,8 +197,68 @@
               </th>
             </tr>
           </thead>
-          <tbody id="processTableBody" class="bg-gray-800 divide-y divide-gray-700">
-            <!-- Process rows will be inserted here -->
+          <tbody id="appProcessTableBody" class="bg-gray-800 divide-y divide-gray-700">
+            <!-- Application process rows will be inserted here -->
+            <tr>
+              <td colspan="5" class="px-6 py-4 text-center text-gray-400">
+                <div class="animate-pulse-slow">
+                  Loading processes...
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Background Process Table Section -->
+    <div class="bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+      <div class="p-6 border-b border-gray-700">
+        <h2 class="text-xl font-semibold">Background Processes</h2>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-700">
+          <thead class="bg-gray-700">
+            <tr>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600 transition-all" data-sort="name">
+                <div class="flex items-center">
+                  Process Name
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1 sort-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                  </svg>
+                </div>
+              </th>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600 transition-all" data-sort="pid">
+                <div class="flex items-center">
+                  PID
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1 sort-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                  </svg>
+                </div>
+              </th>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600 transition-all" data-sort="cpu">
+                <div class="flex items-center">
+                  CPU Usage
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1 sort-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                  </svg>
+                </div>
+              </th>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600 transition-all" data-sort="memory">
+                <div class="flex items-center">
+                  Memory Usage
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1 sort-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                  </svg>
+                </div>
+              </th>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody id="backgroundProcessTableBody" class="bg-gray-800 divide-y divide-gray-700">
+            <!-- Background process rows will be inserted here -->
             <tr>
               <td colspan="5" class="px-6 py-4 text-center text-gray-400">
                 <div class="animate-pulse-slow">
@@ -218,12 +296,15 @@
       const socket = io();
       
       // DOM elements
-      const processTableBody = document.getElementById('processTableBody');
+      const appProcessTableBody = document.getElementById('appProcessTableBody');
+      const backgroundProcessTableBody = document.getElementById('backgroundProcessTableBody');
       const totalProcessesEl = document.getElementById('totalProcesses');
       const cpuUsageTextEl = document.getElementById('cpuUsageText');
       const cpuUsageBarEl = document.getElementById('cpuUsageBar');
+      const cpuCoresEl = document.getElementById('cpuCores');
       const memoryUsageTextEl = document.getElementById('memoryUsageText');
       const memoryUsageBarEl = document.getElementById('memoryUsageBar');
+      const totalMemoryEl = document.getElementById('totalMemory');
       const searchInput = document.getElementById('searchInput');
       const refreshBtn = document.getElementById('refreshBtn');
       const confirmationModal = document.getElementById('confirmationModal');
@@ -237,16 +318,18 @@
       // State variables
       let processes = [];
       let filteredProcesses = [];
+      let appProcesses = [];
+      let backgroundProcesses = [];
       let currentSort = { column: 'cpu', direction: 'desc' };
       let processToKill = null;
       let preventRefresh = false;
       let lastCpuValue = 0; // Store the last CPU value for smoothing
+      let systemMemoryMB = 16384; // Default to 16GB if detection fails
+      let usedMemoryMB = 0; // Actual used memory from OS
+      let systemMemoryPercent = 0; // System-reported memory percentage
       
       // Chart data arrays
       const maxDataPoints = 20; // Maximum number of data points to display
-      const cpuData = [];
-      const memoryData = [];
-      const timeLabels = [];
       
       // Initialize charts
       const cpuChartCtx = document.getElementById('cpuChart').getContext('2d');
@@ -256,10 +339,10 @@
       const cpuChart = new Chart(cpuChartCtx, {
         type: 'line',
         data: {
-          labels: timeLabels,
+          labels: [],
           datasets: [{
             label: 'CPU Usage (%)',
-            data: cpuData,
+            data: [],
             borderColor: 'rgb(34, 197, 94)',
             backgroundColor: 'rgba(34, 197, 94, 0.1)',
             borderWidth: 2,
@@ -274,6 +357,14 @@
           maintainAspectRatio: false,
           animation: {
             duration: 500
+          },
+          layout: {
+            padding: {
+              left: 10,
+              right: 25,
+              top: 20,
+              bottom: 10
+            }
           },
           scales: {
             y: {
@@ -319,10 +410,10 @@
       const memoryChart = new Chart(memoryChartCtx, {
         type: 'line',
         data: {
-          labels: timeLabels,
+          labels: [],
           datasets: [{
-            label: 'Memory Usage (MB)',
-            data: memoryData,
+            label: 'Memory Usage (GB)',
+            data: [],
             borderColor: 'rgb(168, 85, 247)',
             backgroundColor: 'rgba(168, 85, 247, 0.1)',
             borderWidth: 2,
@@ -337,6 +428,14 @@
           maintainAspectRatio: false,
           animation: {
             duration: 500
+          },
+          layout: {
+            padding: {
+              left: 10,
+              right: 25,
+              top: 20,
+              bottom: 10
+            }
           },
           scales: {
             y: {
@@ -384,15 +483,19 @@
         const timeLabel = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         
         // Add new data points
-        timeLabels.push(timeLabel);
-        cpuData.push(cpuValue);
-        memoryData.push(memoryValue);
+        cpuChart.data.labels.push(timeLabel);
+        cpuChart.data.datasets[0].data.push(cpuValue);
+        memoryChart.data.labels.push(timeLabel);
+        memoryChart.data.datasets[0].data.push(memoryValue);
         
         // Limit the number of data points
-        if (timeLabels.length > maxDataPoints) {
-          timeLabels.shift();
-          cpuData.shift();
-          memoryData.shift();
+        if (cpuChart.data.labels.length > maxDataPoints) {
+          cpuChart.data.labels.shift();
+          cpuChart.data.datasets[0].data.shift();
+        }
+        if (memoryChart.data.labels.length > maxDataPoints) {
+          memoryChart.data.labels.shift();
+          memoryChart.data.datasets[0].data.shift();
         }
         
         // Update charts
@@ -402,6 +505,33 @@
       
       // Initialize the dashboard
       function init() {
+        // Display CPU core count
+        const logicalProcessorCount = navigator.hardwareConcurrency || 4;
+        cpuCoresEl.textContent = `(${logicalProcessorCount} cores)`;
+        
+        // Try to get system memory information from the server
+        fetch('/api/system-info')
+          .then(response => response.json())
+          .then(data => {
+            if (data.totalMemoryMB) {
+              systemMemoryMB = data.totalMemoryMB;
+              usedMemoryMB = data.usedMemoryMB || 0;
+              systemMemoryPercent = data.memoryUsagePercent || 0;
+              
+              const totalMemoryGB = (systemMemoryMB / 1024).toFixed(1);
+              totalMemoryEl.textContent = `(of ${totalMemoryGB} GB total)`;
+              
+              // Update memory display immediately
+              updateMemoryDisplay(usedMemoryMB, systemMemoryPercent);
+            }
+          })
+          .catch(error => {
+            console.error('Failed to get system memory info:', error);
+            // Set default value
+            const totalMemoryGB = (systemMemoryMB / 1024).toFixed(1);
+            totalMemoryEl.textContent = `(of ${totalMemoryGB} GB total)`;
+          });
+        
         // Set up event listeners
         setupEventListeners();
         
@@ -410,6 +540,9 @@
         
         // Listen for process killed event
         socket.on('processKilled', handleProcessKilled);
+        
+        // Set up timer to refresh system info regularly
+        setInterval(refreshSystemInfo, 10000); // Every 10 seconds
       }
       
       // Set up event listeners
@@ -482,6 +615,10 @@
             process.pid.toString().includes(searchTerm)
           );
         }
+        
+        // Separate processes into application and background
+        appProcesses = filteredProcesses.filter(process => !process.isBackgroundProcess);
+        backgroundProcesses = filteredProcesses.filter(process => process.isBackgroundProcess);
       }
       
       // Sort processes
@@ -507,14 +644,18 @@
         // Update total processes count
         totalProcessesEl.textContent = processes.length;
         
-        // Calculate total CPU and memory usage
+        // Calculate total CPU usage
         let totalCpu = 0;
-        let totalMemory = 0;
         
         processes.forEach(process => {
           totalCpu += process.cpu;
-          totalMemory += process.memory;
         });
+        
+        // Fix for CPU calculation - normalize to logical processor count
+        // A single-threaded app at 100% on one core will show as 100/logical_cores percent
+        // This better matches how Task Manager displays CPU usage
+        const logicalProcessorCount = navigator.hardwareConcurrency || 4; // Default to 4 if not available
+        totalCpu = Math.min(100, totalCpu / logicalProcessorCount);
         
         // Apply smoothing to CPU usage to prevent jumpy display
         // Use weighted average: 70% of new value, 30% of old value
@@ -540,48 +681,75 @@
           cpuUsageBarEl.className = 'shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-green-500 transition-all duration-500 ease-in-out';
         }
         
-        // Update memory usage
-        memoryUsageTextEl.textContent = `${totalMemory.toLocaleString()} MB`;
-        // Assuming 16GB (16384 MB) of total memory for the percentage calculation
-        const memoryPercentage = Math.min(100, (totalMemory / 16384) * 100).toFixed(1);
-        memoryUsageBarEl.style.width = `${memoryPercentage}%`;
+        // Update CPU chart data with direct Chart.js API access
+        const now = new Date();
+        const timeLabel = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const cpuValue = parseFloat(cpuPercentage);
         
-        // Update color based on usage
-        if (memoryPercentage > 70) {
-          memoryUsageTextEl.className = 'text-4xl font-bold text-red-500';
-          memoryUsageBarEl.className = 'shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-red-500 transition-all duration-500 ease-in-out';
-        } else if (memoryPercentage > 40) {
-          memoryUsageTextEl.className = 'text-4xl font-bold text-yellow-500';
-          memoryUsageBarEl.className = 'shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-yellow-500 transition-all duration-500 ease-in-out';
+        // Check if we should add a new time label or update the latest one
+        if (cpuChart.data.labels.length === 0 || 
+            cpuChart.data.labels[cpuChart.data.labels.length - 1] !== timeLabel) {
+          // Add to CPU chart
+          cpuChart.data.labels.push(timeLabel);
+          cpuChart.data.datasets[0].data.push(cpuValue);
+          
+          // Limit the number of data points
+          if (cpuChart.data.labels.length > maxDataPoints) {
+            cpuChart.data.labels.shift();
+            cpuChart.data.datasets[0].data.shift();
+          }
+          
+          // Update CPU chart
+          cpuChart.update();
         } else {
-          memoryUsageTextEl.className = 'text-4xl font-bold text-purple-500';
-          memoryUsageBarEl.className = 'shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-purple-500 transition-all duration-500 ease-in-out';
+          // Update the most recent data point
+          cpuChart.data.datasets[0].data[cpuChart.data.datasets[0].data.length - 1] = cpuValue;
+          cpuChart.update();
         }
-        
-        // Update charts with new data
-        updateCharts(parseFloat(cpuPercentage), totalMemory);
       }
       
       // Render process table
       function renderProcessTable() {
-        // Clear table
-        processTableBody.innerHTML = '';
+        // Clear tables
+        appProcessTableBody.innerHTML = '';
+        backgroundProcessTableBody.innerHTML = '';
         
-        // Sort and render processes
-        const sortedProcesses = sortProcesses(filteredProcesses);
+        // Sort processes
+        const sortedAppProcesses = sortProcesses(appProcesses);
+        const sortedBackgroundProcesses = sortProcesses(backgroundProcesses);
         
-        if (sortedProcesses.length === 0) {
+        // Check if app processes are empty
+        if (sortedAppProcesses.length === 0) {
           const emptyRow = document.createElement('tr');
           emptyRow.innerHTML = `
             <td colspan="5" class="px-6 py-4 text-center text-gray-400">
-              No processes found matching your search.
+              No application processes found matching your search.
             </td>
           `;
-          processTableBody.appendChild(emptyRow);
-          return;
+          appProcessTableBody.appendChild(emptyRow);
+        } else {
+          // Render application processes
+          renderProcessRows(sortedAppProcesses, appProcessTableBody);
         }
         
-        sortedProcesses.forEach((process, index) => {
+        // Check if background processes are empty
+        if (sortedBackgroundProcesses.length === 0) {
+          const emptyRow = document.createElement('tr');
+          emptyRow.innerHTML = `
+            <td colspan="5" class="px-6 py-4 text-center text-gray-400">
+              No background processes found matching your search.
+            </td>
+          `;
+          backgroundProcessTableBody.appendChild(emptyRow);
+        } else {
+          // Render background processes
+          renderProcessRows(sortedBackgroundProcesses, backgroundProcessTableBody);
+        }
+      }
+      
+      // Helper function to render process rows
+      function renderProcessRows(processes, tableBody) {
+        processes.forEach((process, index) => {
           const row = document.createElement('tr');
           row.className = 'hover:bg-gray-700 transition-all slide-in';
           row.style.animationDelay = `${index * 30}ms`;
@@ -591,9 +759,14 @@
           if (process.cpu > 10) cpuClass = 'text-yellow-400';
           if (process.cpu > 30) cpuClass = 'text-red-400';
           
+          // Convert memory from MB to GB with 2 decimal places for better precision at smaller values
+          const memoryGB = (process.memory / 1024).toFixed(2);
+          const memoryGBValue = parseFloat(memoryGB);
+          
           let memoryClass = 'text-purple-400';
-          if (process.memory > 500) memoryClass = 'text-yellow-400';
-          if (process.memory > 1000) memoryClass = 'text-red-400';
+          // Update thresholds to use GB values (0.5 GB = 500 MB, 1 GB = 1024 MB)
+          if (memoryGBValue > 0.5) memoryClass = 'text-yellow-400';
+          if (memoryGBValue > 1.0) memoryClass = 'text-red-400';
           
           row.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap">
@@ -608,7 +781,7 @@
               <div class="text-sm ${cpuClass}">${process.cpu.toFixed(1)}%</div>
             </td>
             <td class="px-6 py-4 whitespace-nowrap">
-              <div class="text-sm ${memoryClass}">${process.memory} MB</div>
+              <div class="text-sm ${memoryClass}">${memoryGB} GB</div>
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
               <button class="kill-process-btn text-red-500 hover:text-red-700 transition-all" data-pid="${process.pid}" data-name="${process.name}">
@@ -619,11 +792,11 @@
             </td>
           `;
           
-          processTableBody.appendChild(row);
+          tableBody.appendChild(row);
         });
         
-        // Add event listeners to kill buttons
-        document.querySelectorAll('.kill-process-btn').forEach(btn => {
+        // Add event listeners to kill buttons in this table
+        tableBody.querySelectorAll('.kill-process-btn').forEach(btn => {
           btn.addEventListener('click', () => {
             const pid = parseInt(btn.dataset.pid);
             const name = btn.dataset.name;
@@ -688,6 +861,70 @@
           clearTimeout(timeout);
           timeout = setTimeout(later, wait);
         };
+      }
+      
+      // Refresh system information
+      function refreshSystemInfo() {
+        fetch('/api/system-info')
+          .then(response => response.json())
+          .then(data => {
+            if (data.totalMemoryMB) {
+              systemMemoryMB = data.totalMemoryMB;
+              usedMemoryMB = data.usedMemoryMB || 0;
+              systemMemoryPercent = data.memoryUsagePercent || 0;
+              
+              // Update memory display
+              updateMemoryDisplay(usedMemoryMB, systemMemoryPercent);
+            }
+          })
+          .catch(error => {
+            console.error('Failed to refresh system info:', error);
+          });
+      }
+      
+      // Update memory display with system values
+      function updateMemoryDisplay(memory, percentage) {
+        // Convert MB to GB with 1 decimal place
+        const memoryGB = (memory / 1024).toFixed(1);
+        memoryUsageTextEl.textContent = `${memoryGB} GB`;
+        memoryUsageBarEl.style.width = `${percentage}%`;
+        
+        // Update color based on usage
+        if (percentage > 70) {
+          memoryUsageTextEl.className = 'text-4xl font-bold text-red-500';
+          memoryUsageBarEl.className = 'shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-red-500 transition-all duration-500 ease-in-out';
+        } else if (percentage > 40) {
+          memoryUsageTextEl.className = 'text-4xl font-bold text-yellow-500';
+          memoryUsageBarEl.className = 'shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-yellow-500 transition-all duration-500 ease-in-out';
+        } else {
+          memoryUsageTextEl.className = 'text-4xl font-bold text-purple-500';
+          memoryUsageBarEl.className = 'shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-purple-500 transition-all duration-500 ease-in-out';
+        }
+        
+        // Update memory chart without reusing timeLabels from CPU chart
+        const now = new Date();
+        const timeLabel = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        
+        // Check if we should add a new time label or update the latest one
+        if (memoryChart.data.labels.length === 0 || 
+            memoryChart.data.labels[memoryChart.data.labels.length - 1] !== timeLabel) {
+          // Add to memory chart - convert MB to GB for the chart
+          memoryChart.data.labels.push(timeLabel);
+          memoryChart.data.datasets[0].data.push(parseFloat(memoryGB));
+          
+          // Limit the number of data points
+          if (memoryChart.data.labels.length > maxDataPoints) {
+            memoryChart.data.labels.shift();
+            memoryChart.data.datasets[0].data.shift();
+          }
+          
+          // Update memory chart
+          memoryChart.update();
+        } else {
+          // Update the most recent data point - convert MB to GB
+          memoryChart.data.datasets[0].data[memoryChart.data.datasets[0].data.length - 1] = parseFloat(memoryGB);
+          memoryChart.update();
+        }
       }
       
       // Initialize the dashboard

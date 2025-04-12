@@ -3,6 +3,7 @@ const http = require('http');
 const socketIo = require('socket.io');
 const path = require('path');
 const cors = require('cors');
+const os = require('os');
 // ps-list v8+ is ESM only, so we need to import it dynamically
 let psList;
 (async () => {
@@ -28,6 +29,35 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Routes
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// API endpoint to get system information
+app.get('/api/system-info', (req, res) => {
+  try {
+    const totalMemoryBytes = os.totalmem();
+    const freeMemoryBytes = os.freemem();
+    const usedMemoryBytes = totalMemoryBytes - freeMemoryBytes;
+    
+    const totalMemoryMB = Math.round(totalMemoryBytes / (1024 * 1024));
+    const freeMemoryMB = Math.round(freeMemoryBytes / (1024 * 1024));
+    const usedMemoryMB = Math.round(usedMemoryBytes / (1024 * 1024));
+    
+    const cpuCount = os.cpus().length;
+    
+    res.json({
+      totalMemoryMB,
+      freeMemoryMB,
+      usedMemoryMB,
+      memoryUsagePercent: Math.round((usedMemoryBytes / totalMemoryBytes) * 100),
+      cpuCount,
+      platform: os.platform(),
+      osType: os.type(),
+      osRelease: os.release()
+    });
+  } catch (error) {
+    console.error('Error fetching system info:', error);
+    res.status(500).json({ error: 'Failed to fetch system information' });
+  }
 });
 
 // API endpoint to get all processes
@@ -67,15 +97,62 @@ async function getProcessesWithUsage() {
     const pids = processes.map(proc => proc.pid);
     const usageData = await pidusage(pids);
     
+    // Get CPU core count for more accurate percentage calculation
+    const cpuCount = os.cpus().length;
+    
+    // Get system memory info for reference
+    const totalMemoryBytes = os.totalmem();
+    const freeMemoryBytes = os.freemem();
+    const usedMemoryBytes = totalMemoryBytes - freeMemoryBytes;
+    
+    // Calculate a scaling factor to adjust process memory values
+    // This helps address the over-counting problem by scaling process memory to match actual system usage
+    let totalReportedMemory = 0;
+    for (const pid in usageData) {
+      if (usageData[pid] && usageData[pid].memory) {
+        totalReportedMemory += usageData[pid].memory;
+      }
+    }
+    
+    // If reported memory exceeds used memory, apply scaling
+    const scalingFactor = totalReportedMemory > usedMemoryBytes && totalReportedMemory > 0 
+      ? usedMemoryBytes / totalReportedMemory 
+      : 1;
+    
     // Combine process info with usage data
     const processesWithUsage = processes.map(proc => {
       const usage = usageData[proc.pid] || { cpu: 0, memory: 0 };
+      
+      // Adjust CPU usage to better match Task Manager
+      // pidusage returns CPU percentage per core, so we need to normalize it
+      let cpuValue = usage.cpu ? parseFloat(usage.cpu.toFixed(2)) : 0;
+      
+      // CPU usage should never exceed 100 * number of cores
+      cpuValue = Math.min(cpuValue, 100 * cpuCount);
+      
+      // Adjust memory value with scaling factor to avoid over-reporting
+      const adjustedMemory = usage.memory * scalingFactor;
+      
+      // Determine if process is a background process or application process
+      // Background processes typically have no UI and run in the background
+      // This is a simple heuristic - in a real system, you might have a more sophisticated way to determine this
+      const isBackgroundProcess = 
+        proc.name.toLowerCase().includes('svc') || 
+        proc.name.toLowerCase().includes('service') ||
+        proc.name.toLowerCase().includes('daemon') ||
+        proc.name.toLowerCase().includes('agent') ||
+        proc.name.toLowerCase().includes('helper') ||
+        proc.name.toLowerCase().includes('system') ||
+        proc.name.toLowerCase().startsWith('com.') ||
+        !proc.name.endsWith('.exe'); // On Windows, many user applications end with .exe
+      
       return {
         pid: proc.pid,
         name: proc.name,
-        cpu: usage.cpu ? parseFloat(usage.cpu.toFixed(2)) : 0,
-        memory: usage.memory ? Math.round(usage.memory / (1024 * 1024)) : 0, // Convert to MB
-        ppid: proc.ppid
+        cpu: cpuValue,
+        memory: adjustedMemory ? Math.round(adjustedMemory / (1024 * 1024)) : 0, // Convert to MB
+        ppid: proc.ppid,
+        isBackgroundProcess: isBackgroundProcess
       };
     });
     
